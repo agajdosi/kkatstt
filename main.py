@@ -34,10 +34,12 @@ def process_files(dirpath: str):
 # FILE -> PART -> SEGMENTS
 
 def process_file(filepath: str):
+    print(f"=== PROCESSING FILE: {filepath}")
     filename = os.path.basename(filepath)
     basename = os.path.splitext(filename)[0]
     extension = os.path.splitext(filename)[1]
-    print(f"=== PROCESSING FILE: {filepath}, basename={basename}, extension={extension}")
+    language = detect_language(basename)
+    print(f"==> basename={basename}, extension={extension}, language={language}")
     
     # FILE into parts
     parts = split_file(filepath, filename, basename)
@@ -46,7 +48,7 @@ def process_file(filepath: str):
     segments: list[TranscriptionSegment] = []
     for i, part in enumerate(parts):
         print(f"\n===== {i+1:03d} PROCESSING PART: {part.filepath}")
-        transcription = process_part(part)
+        transcription = process_part(part, language)
         transcription.segments
         if transcription.segments is None:
             continue
@@ -56,6 +58,20 @@ def process_file(filepath: str):
 
     # OUT
     save_as_csv(segments, basename)
+
+
+def detect_language(basename: str) -> str:
+    splitted = basename.split("-")
+    accepted_languages = ['en', 'cs', 'de']
+    err_msg = f"Make sure input files have format '<something>-<language>.<extension>'. Where <language> is one of {accepted_languages}."
+    if len(splitted) == 0:
+        raise SystemExit(f"No '-' separator found in filename. {err_msg}")
+    
+    lang = splitted[-1]
+    if lang not in accepted_languages:
+        raise SystemExit(f"Detected language '{lang}' unsupported. {err_msg}")
+
+    return lang
 
 
 def save_as_csv(segments: list[TranscriptionSegment], basename: str):
@@ -83,8 +99,8 @@ def save_as_csv(segments: list[TranscriptionSegment], basename: str):
     print(f"\n\n===== CSV exported: {csv_path}")
 
 
-def process_part(part: AudioPart):
-    transcription = speech_to_text(part.filepath)
+def process_part(part: AudioPart, language: str):
+    transcription = speech_to_text(part.filepath, language)
     if transcription.segments is None:
         return transcription
 
@@ -131,11 +147,11 @@ def split_file(filepath: str, filename: str, basename: str):
     return parts
 
 
-def speech_to_text(filepath: str) -> TranscriptionVerbose:
+def speech_to_text(filepath: str, language: str) -> TranscriptionVerbose:
     file = open( filepath, "rb")
     transcription = client.audio.transcriptions.create(
         model="whisper-1",
-        language="cs", # TODO: get the language from filename
+        language=language,
         file=file,
         response_format="verbose_json",
         timestamp_granularities=["segment"],
