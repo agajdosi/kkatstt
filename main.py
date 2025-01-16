@@ -2,6 +2,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 import csv
+from datetime import timedelta
 import dotenv
 from openai import OpenAI
 from openai.types.audio.transcription_verbose import TranscriptionVerbose, TranscriptionSegment
@@ -61,17 +62,21 @@ def save_as_csv(segments: list[TranscriptionSegment], basename: str):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     csv_path = os.path.join(OUTPUT_DIR, f"{basename}.csv")
     with open(csv_path, "w") as file:
-        writer = csv.DictWriter(file, fieldnames=["segment number", "start", "end", "overlap", "text"])
+        writer = csv.DictWriter(file, fieldnames=["segment number", "overlap", "start_secs", "end_secs", "start", "end", "text"])
         writer.writeheader()
         for i, segment in enumerate(segments):
             overlap = ""
             if segment.id == 0 and i != 0:
                 overlap = "YES"
+            start = round(segment.start, 0)
+            end = round(segment.end, 0)
             row = {
                 "segment number": i+1,
-                "start": f"{round(segment.start,1):.1f}",
-                "end": f"{round(segment.end,1):.1f}",
                 "overlap": overlap,
+                "start_secs": start,
+                "end_secs": end,
+                "start": str(timedelta(seconds=start)),
+                "end": str(timedelta(seconds=end)),
                 "text": segment.text.strip(),
                 }
             writer.writerow(row)
