@@ -1,7 +1,13 @@
 import os
+from dataclasses import dataclass
+import dotenv
 from openai import OpenAI
 from openai.types.audio.transcription_verbose import TranscriptionVerbose
-import dotenv
+from pydub import AudioSegment
+
+SOURCE_DIR = "src"
+PROCESSING_DIR = "pre"
+OUTPUT_DIR = "out"
 
 dotenv.load_dotenv()
 api_key = os.environ.get("API_KEY")
@@ -15,14 +21,22 @@ def process_files(dirpath: str):
     for file in files:
         process_file(file)
 
+# FILE -> PART -> SEGMENTS
 
 def process_file(filepath: str):
-    # Prepare
-    splitted = split_file(filepath)
+    # FILE into parts
+    parts = split_file(filepath)
+
+    return
+    # PARTS - text to speech
+
+    for part in parts:
+        transcription = speech_to_text(part)
 
 
     # Speech-to-text
     json = speech_to_text(filepath)
+
 
 
     # OUT
@@ -31,10 +45,59 @@ def process_file(filepath: str):
     output_file_path = os.path.join("out", f"{base_name_without_ext}.srt")
     
 
+def process_part(part_path: str, start: float):
+    part_path = "pre/segment_001.m4a"
+    transcription = speech_to_text(part_path)
+    if transcription.segments is None:
+        return
+
+    for segment in transcription.segments:
+        print(f"{segment.start}->{segment.end}\n{segment.text}")
+
+
+@dataclass
+class AudioPart():
+    filepath: str
+    start: int
 
 def split_file(filepath: str):
-    pass
-    return #parts
+    filename = os.path.basename(filepath)
+    basename = os.path.splitext(filename)[0]
+    
+    output_dir = os.path.join(PROCESSING_DIR, basename)
+    os.makedirs(output_dir, exist_ok=True)
+
+    audio = AudioSegment.from_file(filepath)
+
+    # Parameters for trimming
+    part_duration = 5 * 60 * 1000  # 5 minutes in milliseconds
+    overlap_duration = 10 * 1000  # 10 seconds in milliseconds
+
+    parts: list[AudioPart] = []
+    start_time = 0
+    part_number = 1
+    while start_time < len(audio):
+        end_time = start_time + part_duration
+        if end_time > len(audio):
+            end_time = len(audio)
+
+        # Extract segment
+        part = audio[start_time:end_time]
+
+        # Export the part into a file
+        part_filename = f"part{part_number:03d}_{start_time}.m4a"
+        part_path = os.path.join(output_dir, part_filename)
+        part.export(part_path, format="ipod")
+
+        print(f"{part_number} exported: {part_path} (start={start_time})")
+        parts.append(AudioPart(part_filename, start_time))
+
+        # Update start_time with overlap
+        start_time += part_duration - overlap_duration
+        part_number += 1
+
+    print("All segments exported.")
+    return parts
 
 
 def speech_to_text(filepath: str) -> TranscriptionVerbose:
@@ -59,12 +122,7 @@ def save_transcription(text: str, out_path: str):
 
 
 
-file = "pre/segment_001.m4a"
-transcription = speech_to_text(file)
-
-for segment in transcription.segments:
-    print(f"{segment.start}->{segment.end}\n{segment.text}")
-
-
+if __name__ == "__main__":
+    process_file("src/1-favu-cs.m4a")
 
 
