@@ -53,8 +53,6 @@ def process_file(filepath: str):
         if transcription.segments is None:
             continue
         segments = segments + transcription.segments
-        if i >= 2:
-            break
 
     # OUT
     save_as_csv(segments, basename)
