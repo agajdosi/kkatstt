@@ -1,6 +1,7 @@
 import os
 from dataclasses import dataclass
 from pathlib import Path
+import csv
 import dotenv
 from openai import OpenAI
 from openai.types.audio.transcription_verbose import TranscriptionVerbose, TranscriptionSegment
@@ -32,15 +33,18 @@ def process_files(dirpath: str):
 # FILE -> PART -> SEGMENTS
 
 def process_file(filepath: str):
-    print(f"=== PROCESSING FILE: {filepath}")
+    filename = os.path.basename(filepath)
+    basename = os.path.splitext(filename)[0]
+    extension = os.path.splitext(filename)[1]
+    print(f"=== PROCESSING FILE: {filepath}, basename={basename}, extension={extension}")
     
     # FILE into parts
-    parts = split_file(filepath)
+    parts = split_file(filepath, filename, basename)
 
     # PARTS - text to speech
     segments: list[TranscriptionSegment] = []
     for i, part in enumerate(parts):
-        print(f"\n===== {i:03d} PROCESSING PART: {part.filepath}")
+        print(f"\n===== {i+1:03d} PROCESSING PART: {part.filepath}")
         transcription = process_part(part)
         transcription.segments
         if transcription.segments is None:
@@ -49,16 +53,30 @@ def process_file(filepath: str):
         if i >= 2:
             break
 
-    print(f"\n\n=== SEGMENTS of file: {filepath}")
-    for i, segment in enumerate(segments):
-        print(f"{i}. segment ({segment.start}->{segment.end}): {segment}")
-
-    return
     # OUT
-    base_filename = os.path.basename(filepath)
-    base_name_without_ext = os.path.splitext(base_filename)[0]
-    output_file_path = os.path.join("out", f"{base_name_without_ext}.srt")
-    
+    save_as_csv(segments, basename)
+
+
+def save_as_csv(segments: list[TranscriptionSegment], basename: str):
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    csv_path = os.path.join(OUTPUT_DIR, f"{basename}.csv")
+    with open(csv_path, "w") as file:
+        writer = csv.DictWriter(file, fieldnames=["segment number", "start", "end", "overlap", "text"])
+        writer.writeheader()
+        for i, segment in enumerate(segments):
+            overlap = ""
+            if segment.id == 0 and i != 0:
+                overlap = "YES"
+            row = {
+                "segment number": i+1,
+                "start": f"{round(segment.start,1):.1f}",
+                "end": f"{round(segment.end,1):.1f}",
+                "overlap": overlap,
+                "text": segment.text.strip(),
+                }
+            writer.writerow(row)
+    print(f"\n\n===== CSV exported: {csv_path}")
+
 
 def process_part(part: AudioPart):
     transcription = speech_to_text(part.filepath)
@@ -73,9 +91,7 @@ def process_part(part: AudioPart):
     return transcription
 
 
-def split_file(filepath: str):
-    filename = os.path.basename(filepath)
-    basename = os.path.splitext(filename)[0]
+def split_file(filepath: str, filename: str, basename: str):
     output_dir = os.path.join(PROCESSING_DIR, basename)
     os.makedirs(output_dir, exist_ok=True)
     audio = AudioSegment.from_file(filepath)
