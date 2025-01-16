@@ -26,9 +26,13 @@ class AudioPart():
     end: int
 
 
-def process_files(dirpath: str):
-    files: list[str] = []
+def process_files():
+    files = sorted(os.listdir(SOURCE_DIR))
     for file in files:
+        file_path = os.path.join(SOURCE_DIR, file)
+        if not os.path.isfile(file_path):
+            print(f"--- skipping {file_path} which is not a file")
+            continue
         process_file(file)
 
 # FILE -> PART -> SEGMENTS
@@ -167,6 +171,4 @@ def save_transcription(text: str, out_path: str):
 
 
 if __name__ == "__main__":
-    process_file("src/1-favu-cs.m4a")
-
-
+    process_files()
