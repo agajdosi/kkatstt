@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass
+from pathlib import Path
 import dotenv
 from openai import OpenAI
 from openai.types.audio.transcription_verbose import TranscriptionVerbose
@@ -59,14 +60,13 @@ def process_part(part_path: str, start: float):
 class AudioPart():
     filepath: str
     start: int
+    end: int
 
 def split_file(filepath: str):
     filename = os.path.basename(filepath)
     basename = os.path.splitext(filename)[0]
-    
     output_dir = os.path.join(PROCESSING_DIR, basename)
     os.makedirs(output_dir, exist_ok=True)
-
     audio = AudioSegment.from_file(filepath)
 
     # Parameters for trimming
@@ -81,22 +81,21 @@ def split_file(filepath: str):
         if end_time > len(audio):
             end_time = len(audio)
 
-        # Extract segment
-        part = audio[start_time:end_time]
-
-        # Export the part into a file
         part_filename = f"part{part_number:03d}_{start_time}.m4a"
         part_path = os.path.join(output_dir, part_filename)
-        part.export(part_path, format="ipod")
 
-        print(f"{part_number} exported: {part_path} (start={start_time})")
-        parts.append(AudioPart(part_filename, start_time))
-
-        # Update start_time with overlap
+        if Path(part_path).is_file():
+            print(f"{part_number:03d} skipped: file already exists {part_path}")
+        else:
+            part = audio[start_time:end_time]        
+            part.export(part_path, format="ipod")
+            print(f"{part_number:03d} exported: {part_path} (start={start_time})")
+        
+        parts.append(AudioPart(part_filename, start_time, end_time))
         start_time += part_duration - overlap_duration
         part_number += 1
 
-    print("All segments exported.")
+    print("All parts ready.")
     return parts
 
 
