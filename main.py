@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import dotenv
 from openai import OpenAI
-from openai.types.audio.transcription_verbose import TranscriptionVerbose
+from openai.types.audio.transcription_verbose import TranscriptionVerbose, TranscriptionSegment
 from pydub import AudioSegment
 
 SOURCE_DIR = "src"
@@ -17,6 +17,13 @@ if not api_key:
 client = OpenAI(api_key=api_key)
 
 
+@dataclass
+class AudioPart():
+    filepath: str
+    start: int
+    end: int
+
+
 def process_files(dirpath: str):
     files: list[str] = []
     for file in files:
@@ -25,42 +32,46 @@ def process_files(dirpath: str):
 # FILE -> PART -> SEGMENTS
 
 def process_file(filepath: str):
+    print(f"=== PROCESSING FILE: {filepath}")
+    
     # FILE into parts
     parts = split_file(filepath)
 
-    return
     # PARTS - text to speech
+    segments: list[TranscriptionSegment] = []
+    for i, part in enumerate(parts):
+        print(f"\n===== {i:03d} PROCESSING PART: {part.filepath}")
+        transcription = process_part(part)
+        transcription.segments
+        if transcription.segments is None:
+            continue
+        segments = segments + transcription.segments
+        if i >= 2:
+            break
 
-    for part in parts:
-        transcription = speech_to_text(part)
+    print(f"\n\n=== SEGMENTS of file: {filepath}")
+    for i, segment in enumerate(segments):
+        print(f"{i}. segment ({segment.start}->{segment.end}): {segment}")
 
-
-    # Speech-to-text
-    json = speech_to_text(filepath)
-
-
-
+    return
     # OUT
     base_filename = os.path.basename(filepath)
     base_name_without_ext = os.path.splitext(base_filename)[0]
     output_file_path = os.path.join("out", f"{base_name_without_ext}.srt")
     
 
-def process_part(part_path: str, start: float):
-    part_path = "pre/segment_001.m4a"
-    transcription = speech_to_text(part_path)
+def process_part(part: AudioPart):
+    transcription = speech_to_text(part.filepath)
     if transcription.segments is None:
-        return
+        return transcription
 
     for segment in transcription.segments:
-        print(f"{segment.start}->{segment.end}\n{segment.text}")
+        segment.start = segment.start + part.start / 1000 # pydub stores time in ms, openai in seconds
+        segment.end = segment.end + part.start / 1000 # so converting pydub to seconds
+        print(f"{segment.start}->{segment.end}: {segment.text}")
+        
+    return transcription
 
-
-@dataclass
-class AudioPart():
-    filepath: str
-    start: int
-    end: int
 
 def split_file(filepath: str):
     filename = os.path.basename(filepath)
@@ -91,11 +102,11 @@ def split_file(filepath: str):
             part.export(part_path, format="ipod")
             print(f"{part_number:03d} exported: {part_path} (start={start_time})")
         
-        parts.append(AudioPart(part_filename, start_time, end_time))
+        parts.append(AudioPart(part_path, start_time, end_time))
         start_time += part_duration - overlap_duration
         part_number += 1
 
-    print("All parts ready.")
+    print("--> All parts ready!")
     return parts
 
 
@@ -103,11 +114,10 @@ def speech_to_text(filepath: str) -> TranscriptionVerbose:
     file = open( filepath, "rb")
     transcription = client.audio.transcriptions.create(
         model="whisper-1",
-        language="cs",
+        language="cs", # TODO: get the language from filename
         file=file,
         response_format="verbose_json",
         timestamp_granularities=["segment"],
-        temperature=0.1,
     )
     return transcription
 
